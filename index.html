@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#14307F">
+<title>Hachi Translator</title>
+<link rel="manifest" href="manifest.json"><link rel="icon" href="icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{--bg:#F2F5FA;--surface:#fff;--surface-2:#E9EEF7;--ink:#0E1730;--muted:#55617D;--line:#D6DEEE;--primary:#1B3D9C;--on:#fff;--soft:#E3EAFE;--hdr:#14307F;--ok:#13785A;--ok-soft:#DDF3EA;--warn:#9A4F00;--warn-soft:#FFEAD0;--danger:#B3261E;
+--ui:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;--ar:"Noto Naskh Arabic","Geeza Pro","Segoe UI","Traditional Arabic",Tahoma,Arial,sans-serif;color-scheme:light}
+@media(prefers-color-scheme:dark){:root{--bg:#0A1124;--surface:#121B37;--surface-2:#1A2446;--ink:#E8EDFF;--muted:#9AA7C9;--line:#26315A;--primary:#93ADFF;--on:#0A1124;--soft:#1C2A5C;--hdr:#0F1838;--ok:#52D1A4;--ok-soft:#0F3328;--warn:#FFB36B;--warn-soft:#3C2812;--danger:#FF8A80;color-scheme:dark}}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%}
+body{background:var(--bg);color:var(--ink);font:16px/1.45 var(--ui);padding-top:env(safe-area-inset-top,0)}
+button,textarea{font:inherit;color:inherit}button{cursor:pointer;-webkit-tap-highlight-color:transparent}
+:focus-visible{outline:2px solid var(--primary);outline-offset:2px}[hidden]{display:none!important}
+.ar{font-family:var(--ar);direction:rtl;unicode-bidi:plaintext}
+.ico{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex:none}
+header{background:var(--hdr);color:#fff;position:sticky;top:0;z-index:5}
+.hin{max-width:1000px;margin:0 auto;display:flex;align-items:center;gap:10px;padding:10px max(16px,env(safe-area-inset-left)) 10px max(16px,env(safe-area-inset-right))}
+.mark{font:700 28px/1 var(--ar);direction:rtl}.nm{font-size:11px;letter-spacing:.16em;text-transform:uppercase;opacity:.8;font-weight:650}
+.sp{flex:1}
+.chip{display:inline-flex;align-items:center;gap:7px;border:0;border-radius:99px;padding:6px 12px;font-size:12.5px;background:rgba(255,255,255,.14);color:#fff;white-space:nowrap}
+.chip i{width:8px;height:8px;border-radius:50%;background:#FFB454}.chip.ready i{background:#4ADE9B}.chip.err i{background:#FF6B6B}
+.ib{width:40px;height:40px;border-radius:12px;border:0;background:transparent;color:inherit;display:grid;place-items:center}
+header .ib:hover{background:rgba(255,255,255,.14)}
+main{max-width:1000px;margin:0 auto;padding:14px max(16px,env(safe-area-inset-left)) calc(28px + env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-right));display:flex;flex-direction:column;gap:12px}
+.dir{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center}
+.lang{padding:10px 14px;border-radius:14px;background:var(--surface);border:1px solid var(--line);font-weight:650;text-align:center}
+.lang.on{border-color:var(--primary);color:var(--primary)}
+.swap{width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--soft);color:var(--primary);display:grid;place-items:center}
+.panes{display:grid;gap:12px;grid-template-columns:1fr}
+@media(min-width:860px){.panes{grid-template-columns:1fr 1fr}.pane{min-height:260px}}
+.pane{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:10px;min-height:170px}
+.pane.o{background:var(--soft);border-color:transparent}
+textarea{flex:1;width:100%;border:0;background:transparent;resize:none;outline:none;font-size:22px;line-height:1.45;min-height:110px;padding:0}
+textarea.ar{font-size:26px;line-height:1.7;text-align:right}
+.out{flex:1;font-size:26px;line-height:1.45;word-break:break-word;white-space:pre-wrap;min-height:70px}
+.out.ar{font-size:32px;line-height:1.75;text-align:right}
+.out.busy{opacity:.55}.out.ph{color:var(--muted);font-size:18px}
+.tools{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:7px;height:40px;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:var(--surface);font-weight:600;font-size:14px}
+.btn.sq{width:40px;padding:0;justify-content:center}.btn.pri{background:var(--primary);color:var(--on);border-color:transparent}
+.btn.live{background:var(--danger);color:#fff;border-color:transparent}
+.tag{font-size:11.5px;font-weight:650;padding:3px 9px;border-radius:99px;background:var(--surface);color:var(--muted)}
+.tag.ok{background:var(--ok-soft);color:var(--ok)}.tag.warn{background:var(--warn-soft);color:var(--warn)}
+.sw{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.sw input{width:38px;height:22px;appearance:none;background:var(--line);border-radius:99px;position:relative;transition:.2s}
+.sw input::after{content:"";position:absolute;inset:3px auto 3px 3px;width:16px;border-radius:50%;background:#fff;transition:.2s}
+.sw input:checked{background:var(--primary)}.sw input:checked::after{transform:translateX(16px)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.card h2{margin:0;font-size:17px}.card p{margin:0;color:var(--muted);font-size:14.5px}
+.bar{height:8px;border-radius:9px;background:var(--surface-2);overflow:hidden}.bar i{display:block;height:100%;width:0;background:var(--primary);transition:width .3s}
+.scrim{position:fixed;inset:0;z-index:20;background:rgba(5,10,25,.55);display:flex;align-items:flex-end;justify-content:center}
+.sheet{width:100%;max-width:560px;max-height:88%;overflow:auto;background:var(--surface);border-radius:22px 22px 0 0;padding:18px 18px calc(22px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:12px}
+.sheet h3{margin:0}.sheet p,.sheet li{font-size:14px;color:var(--muted);margin:0}.sheet ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
+.show{position:fixed;inset:0;z-index:30;background:var(--hdr);color:#fff;display:flex;align-items:center;justify-content:center;padding:28px;text-align:center}
+.show div{font-size:clamp(36px,11vw,84px);line-height:1.5;font-weight:650;word-break:break-word}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:40;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;max-width:92vw;text-align:center}
+</style></head><body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z M5 11a7 7 0 0 0 14 0 M12 18v3"/></symbol>
+<symbol id="i-spk" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z M16.5 8.5a5 5 0 0 1 0 7 M19 6a8.5 8.5 0 0 1 0 12"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24"><path d="M9 9h11v11H9z M5 15V4h11"/></symbol>
+<symbol id="i-swap" viewBox="0 0 24 24"><path d="M7 7h12 M16 4l3 3-3 3 M17 17H5 M8 14l-3 3 3 3"/></symbol>
+<symbol id="i-full" viewBox="0 0 24 24"><path d="M4 9V4h5 M20 9V4h-5 M4 15v5h5 M20 15v5h-5"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12 M18 6L6 18"/></symbol>
+<symbol id="i-more" viewBox="0 0 24 24"><path d="M5 12h.01 M12 12h.01 M19 12h.01" stroke-width="3"/></symbol>
+</defs></svg>
+
+<header><div class="hin"><span class="mark" lang="ar">حچي</span><span class="nm">Hachi</span><span class="sp"></span>
+<button class="chip" id="status" aria-live="polite"><i></i><span id="stTxt">Draft mode</span></button>
+<button class="ib" id="menu" aria-label="Menu"><svg class="ico"><use href="#i-more"/></svg></button></div></header>
+
+<main>
+  <div class="dir"><div class="lang on" id="lA">English</div><button class="swap" id="swap" aria-label="Swap languages"><svg class="ico"><use href="#i-swap"/></svg></button><div class="lang ar" id="lB">العراقي</div></div>
+  <div class="panes">
+    <section class="pane">
+      <textarea id="inp" rows="3" autofocus autocomplete="off" spellcheck="false" aria-label="Text to translate" placeholder="Type or speak. Arabic is detected automatically."></textarea>
+      <div class="tools"><button class="btn sq" id="mic" aria-label="Speak"><svg class="ico"><use href="#i-mic"/></svg></button><button class="btn sq" id="clr" aria-label="Clear" hidden><svg class="ico"><use href="#i-x"/></svg></button></div>
+    </section>
+    <section class="pane o">
+      <div class="out ph" id="out" aria-live="polite">Translation appears here.</div>
+      <div class="tools"><span class="tag" id="tag" hidden></span><span class="sp"></span>
+        <label class="sw" id="flv"><input type="checkbox" id="flavour" checked>Iraqi touch</label></div>
+      <div class="tools"><button class="btn" id="play"><svg class="ico"><use href="#i-spk"/></svg>Play</button><button class="btn" id="copy"><svg class="ico"><use href="#i-copy"/></svg>Copy</button><button class="btn" id="show"><svg class="ico"><use href="#i-full"/></svg>Show</button></div>
+    </section>
+  </div>
+  <section class="card" id="setup" hidden>
+    <h2 id="suT">Get the full offline translator</h2>
+    <p id="suP">One-time download of about 1 GB, then it translates any sentence with no internet. Use Wi-Fi.</p>
+    <div class="bar" id="bar" hidden><i id="barI"></i></div>
+    <div class="tools"><button class="btn pri" id="dl">Download and enable offline</button></div>
+  </section>
+</main>
+<div id="layer"></div><div id="toastBox"></div>
+
+<script src="data.js"></script><script src="engine.js"></script>
+<script>
+(() => {
+  const $ = s => document.querySelector(s), esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const ls = { get(k) { try { return localStorage.getItem("hachi2." + k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem("hachi2." + k, v); } catch (e) { } }, del(k) { try { localStorage.removeItem("hachi2." + k); } catch (e) { } } };
+  const S = { dir: "en2ar", ready: false, loading: false, job: 0, raw: "", flavour: ls.get("flavour") !== "0", worker: null, pend: new Map(), seq: 0, cache: new Map() };
+  const inp = $("#inp"), out = $("#out");
+  $("#flavour").checked = S.flavour;
+
+  /* ---------- Iraqi touch: swap formal Arabic for everyday Iraqi words ---------- */
+  const B = "(^|[\\s،.؟!:\"«»()])", A = "(?=$|[\\s،.؟!:\"«»()])";
+  const MAP = [["لا يوجد", "ماكو"], ["لا توجد", "ماكو"], ["يوجد", "اكو"], ["توجد", "اكو"], ["لماذا", "ليش"], ["ماذا", "شنو"], ["كيف", "شلون"], ["أين", "وين"], ["اين", "وين"], ["متى", "شوكت"], ["كم", "شكد"],
+    ["الآن", "هسه"], ["الان", "هسه"], ["غدا", "باچر"], ["غداً", "باچر"], ["جدا", "كلش"], ["جداً", "كلش"], ["كثيرا", "هواية"], ["كثيراً", "هواية"], ["قليلا", "شوية"], ["قليلاً", "شوية"],
+    ["أنا", "آني"], ["انا", "آني"], ["نحن", "احنا"], ["أنتم", "انتو"], ["انتم", "انتو"], ["أنت", "إنت"], ["انت", "إنت"], ["ليس", "مو"], ["هذه", "هاي"], ["الماء", "الماي"], ["ماء", "ماي"], ["الأرز", "التمن"], ["أرز", "تمن"], ["أريد", "اريد"], ["الحافلة", "الباص"], ["حافلة", "باص"], ["المال", "الفلوس"], ["نقود", "فلوس"], ["الطفل", "الجاهل"], ["الأطفال", "الجهال"]]
+    .map(([a, b]) => [new RegExp(B + a + A, "g"), "$1" + b]);
+  const iraqify = s => MAP.reduce((t, [r, b]) => t.replace(r, b), s);
+
+  /* ---------- UI helpers ---------- */
+  let tT; const toast = m => { $("#toastBox").innerHTML = `<div class="toast" role="status">${esc(m)}</div>`; clearTimeout(tT); tT = setTimeout(() => $("#toastBox").innerHTML = "", 3200); };
+  function setDir(d) { S.dir = d; $("#lA").className = "lang" + (d === "ar2en" ? " ar" : ""); $("#lB").className = "lang" + (d === "en2ar" ? " ar" : ""); $("#lA").textContent = d === "en2ar" ? "English" : "العراقي"; $("#lB").textContent = d === "en2ar" ? "العراقي" : "English"; $("#lA").classList.add("on"); $("#flv").hidden = d !== "en2ar"; inp.placeholder = d === "en2ar" ? "Type or speak English. Arabic is detected automatically." : "اكتب بالعراقي أو بالحروف اللاتينية. English is detected automatically."; }
+  function show(text, tag, kind, busy) {
+    S.raw = text;
+    const shown = S.dir === "en2ar" && S.flavour && kind !== "verified" ? iraqify(text) : text;
+    out.textContent = shown || "Translation appears here."; out.className = "out" + (S.dir === "en2ar" ? " ar" : "") + (shown ? "" : " ph") + (busy ? " busy" : "");
+    const t = $("#tag"); t.hidden = !tag; t.textContent = tag || ""; t.className = "tag " + (kind === "draft" ? "warn" : "ok");
+    S.shown = shown;
+  }
+  function status(kind, text) { const b = $("#status"); b.className = "chip " + (kind || ""); $("#stTxt").textContent = text; }
+
+  /* ---------- model worker ---------- */
+  const files = {};
+  function startWorker() {
+    if (S.worker) return S.worker;
+    const w = S.worker = new Worker("worker.js", { type: "module" });
+    w.onmessage = e => {
+      const m = e.data;
+      if (m.type === "progress") {
+        const p = m.p || {}; if (p.status === "progress" && p.file) files[p.file] = { l: p.loaded, t: p.total };
+        let l = 0, t = 0; Object.values(files).forEach(f => { l += f.l || 0; t += f.t || 0; });
+        const pct = t ? Math.min(99, Math.round(100 * l / t)) : 0;
+        $("#barI").style.width = pct + "%"; status("", `Downloading ${pct}%`); $("#suP").textContent = `${(l / 1e6).toFixed(0)} of ${(t / 1e6).toFixed(0)} MB. Keep this page open.`;
+      } else if (m.type === "ready") {
+        S.ready = true; S.loading = false; ls.set("installed", "1"); $("#setup").hidden = true; status("ready", "Offline · AI ready"); toast("Ready. Translation now works with no internet."); run();
+      } else if (m.type === "error") {
+        S.loading = false; S.worker = null; $("#bar").hidden = true; $("#dl").disabled = false; $("#dl").textContent = "Try again";
+        const off = navigator.onLine === false;
+        status("err", "Model not loaded"); $("#setup").hidden = false; $("#suT").textContent = off ? "Connect once to download the model" : "The model couldn't load";
+        $("#suP").textContent = off ? "The first download needs internet. After that it works offline." : "Check your connection and storage space, then try again. (" + m.message.slice(0, 120) + ")";
+      } else if (m.type === "result") { const f = S.pend.get(m.id); if (f) { S.pend.delete(m.id); f(m); } }
+    };
+    return w;
+  }
+  async function loadModel() {
+    if (S.loading || S.ready) return; S.loading = true;
+    $("#bar").hidden = false; $("#dl").disabled = true; $("#dl").textContent = "Downloading…"; status("", "Starting…");
+    try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { }
+    try { const est = await navigator.storage.estimate(); if (est.quota && est.quota - est.usage < 1.3e9) toast("Low storage on this device. The download may fail."); } catch (e) { }
+    startWorker().postMessage({ type: "load" });
+  }
+  const NLLB = { en: "eng_Latn", ar: "acm_Arab" };
+  function neural(text, dir) {
+    return new Promise(res => {
+      const id = ++S.seq; S.pend.set(id, res);
+      S.worker.postMessage({ type: "translate", id, text, src: dir === "en2ar" ? NLLB.en : NLLB.ar, tgt: dir === "en2ar" ? NLLB.ar : NLLB.en, max: Math.min(256, 24 + text.length * 2), beams: 1 });
+    });
+  }
+
+  /* ---------- translate ---------- */
+  const split = t => t.split(/(?<=[.!?؟؛\n])\s+/).map(s => s.trim()).filter(Boolean);
+  async function run() {
+    const text = inp.value.trim(); $("#clr").hidden = !inp.value;
+    inp.classList.toggle("ar", Engine.hasArabic(inp.value));
+    if (!text) { S.job++; show("", ""); return; }
+    const ar = Engine.hasArabic(text); let dir = ar ? "ar2en" : "en2ar";
+    if (!ar && S.dir === "ar2en") { const t = Engine.translate(text, "ar2en"); if (t && (t.conf === "exact" || t.conf === "pattern" || t.conf === "close")) dir = "ar2en"; }
+    if (dir !== S.dir) setDir(dir);
+    const my = ++S.job, whole = Engine.translate(text, dir);
+    if (whole && whole.conf === "exact" && whole.out) { show(whole.out, "Verified phrase", "verified"); return; }
+    if (dir === "ar2en" && !ar) { show(whole.out, "Verified phrase", "verified"); return; } // Latin-letter Iraqi uses the checked dictionary only
+    if (!S.ready) { const ok = whole && whole.out && !(whole.unknown && whole.unknown.length); show(ok ? whole.out : "", ok ? "Draft · limited offline dictionary" : "", "draft"); if (!ok) out.textContent = "Download the offline model (below) to translate any sentence."; return; }
+    const segs = split(text), outs = [];
+    for (let i = 0; i < segs.length; i++) {
+      if (my !== S.job) return;
+      const key = dir + "|" + segs[i], ex = Engine.translate(segs[i], dir);
+      let t = ex && ex.conf === "exact" && ex.out ? ex.out : S.cache.get(key);
+      if (t == null) {
+        show(outs.join(" "), "Translating…", "ok", true);
+        const r = await neural(segs[i], dir); if (my !== S.job) return;
+        if (r.error) { show(outs.join(" "), "Error", "draft"); toast("Translation failed: " + r.error.slice(0, 80)); return; }
+        t = r.text; S.cache.set(key, t); if (S.cache.size > 300) S.cache.delete(S.cache.keys().next().value);
+      }
+      outs.push(t); show(outs.join(" "), i < segs.length - 1 ? "Translating…" : "AI · offline", "ok", i < segs.length - 1);
+    }
+  }
+  let dT; const later = () => { clearTimeout(dT); dT = setTimeout(run, 380); };
+
+  /* ---------- speech ---------- */
+  function speak(text, lang) {
+    if (!("speechSynthesis" in window) || !text) return toast("Audio isn't available in this browser.");
+    const vs = speechSynthesis.getVoices(), want = lang === "ar" ? ["ar-iq", "ar-sa", "ar"] : ["en-us", "en-gb", "en"];
+    let v = null; for (const c of want) { v = vs.find(x => (x.lang || "").replace("_", "-").toLowerCase().startsWith(c)); if (v) break; }
+    const u = new SpeechSynthesisUtterance(lang === "ar" ? text.replace(/گ/g, "ق").replace(/چ/g, "ج").replace(/پ/g, "ب") : text);
+    if (v) { u.voice = v; u.lang = v.lang; } else u.lang = lang === "ar" ? "ar-SA" : "en-US";
+    if (lang === "ar" && !v && vs.length) toast("No Arabic voice on this device. Add one in text-to-speech settings.");
+    u.rate = .92; speechSynthesis.cancel(); speechSynthesis.speak(u);
+  }
+  let rec = null;
+  function listen() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition; if (!SR) return toast("Voice input isn't supported in this browser.");
+    if (rec) { rec.stop(); return; }
+    const r = rec = new SR(); r.lang = S.dir === "en2ar" ? "en-US" : "ar-IQ"; r.interimResults = true; $("#mic").classList.add("live");
+    r.onresult = e => { let t = ""; for (const x of e.results) t += x[0].transcript; inp.value = t; run(); };
+    r.onerror = e => toast({ "not-allowed": "Microphone is blocked. Allow it in the browser.", "network": "Voice recognition needs internet on this device. Typing works offline." }[e.error] || "Voice input stopped.");
+    r.onend = () => { $("#mic").classList.remove("live"); rec = null; };
+    try { r.start(); } catch (e) { rec = null; $("#mic").classList.remove("live"); }
+  }
+
+  /* ---------- events ---------- */
+  inp.addEventListener("input", later);
+  inp.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); clearTimeout(dT); run(); } });
+  $("#clr").onclick = () => { inp.value = ""; run(); inp.focus(); };
+  $("#swap").onclick = () => { const t = S.shown; setDir(S.dir === "en2ar" ? "ar2en" : "en2ar"); if (t) inp.value = t; run(); };
+  $("#flavour").onchange = e => { S.flavour = e.target.checked; ls.set("flavour", S.flavour ? "1" : "0"); show(S.raw, $("#tag").textContent || "", $("#tag").classList.contains("warn") ? "draft" : "ok"); };
+  $("#play").onclick = () => speak(S.shown, S.dir === "en2ar" ? "ar" : "en");
+  $("#copy").onclick = () => { const t = S.shown; if (!t) return; const done = () => toast("Copied"); try { navigator.clipboard.writeText(t).then(done, () => toast("Couldn't copy")); } catch (e) { toast("Couldn't copy"); } };
+  $("#show").onclick = () => { if (!S.shown) return; $("#layer").innerHTML = `<div class="show ${S.dir === "en2ar" ? "ar" : ""}" id="shw"><div>${esc(S.shown)}</div></div>`; $("#shw").onclick = () => $("#layer").innerHTML = ""; };
+  $("#mic").onclick = listen;
+  $("#dl").onclick = loadModel;
+  $("#status").onclick = () => { if (!S.ready && !S.loading) loadModel(); };
+  $("#menu").onclick = () => {
+    $("#layer").innerHTML = `<div class="scrim" id="scr"><div class="sheet" role="dialog" aria-label="About"><h3>About Hachi</h3>
+      <p>Translation runs on your device with Meta's NLLB-200 model (Iraqi Arabic ⇄ English). Nothing you type is sent anywhere.</p>
+      <ul><li>First run needs internet once to download about 1 GB. After that it works offline.</li><li>Speed depends on your device. Short sentences take about a second or two; long text is translated sentence by sentence.</li><li>Machine translation is very good, not perfect. Dialect and slang can come out more formal than spoken Iraqi, which "Iraqi touch" partly corrects. Check anything important with a native speaker.</li><li>Verified phrases (greetings, travel, food, emergencies) use a hand-checked list and appear instantly.</li></ul>
+      <button class="btn" id="del">Remove downloaded model</button><button class="btn pri" id="cls">Close</button></div></div>`;
+    $("#cls").onclick = () => $("#layer").innerHTML = ""; $("#scr").onclick = e => { if (e.target.id === "scr") $("#layer").innerHTML = ""; };
+    $("#del").onclick = async () => { try { for (const k of await caches.keys()) if (k.includes("transformers")) await caches.delete(k); } catch (e) { } ls.del("installed"); toast("Model removed. Reloading…"); setTimeout(() => location.reload(), 900); };
+  };
+  document.addEventListener("keydown", e => { if (e.key === "Escape") $("#layer").innerHTML = ""; });
+  window.addEventListener("offline", () => toast("You're offline." + (S.ready ? " Everything still works." : "")));
+
+  /* ---------- boot ---------- */
+  setDir("en2ar"); status("", "Draft mode"); $("#setup").hidden = false; show("", "");
+  const controlled = () => !("serviceWorker" in navigator) || navigator.serviceWorker.controller;
+  async function boot() {
+    if ("serviceWorker" in navigator && /^https?:/.test(location.protocol)) {
+      try { await navigator.serviceWorker.register("sw.js"); } catch (e) { }
+      if (!controlled()) await Promise.race([new Promise(r => navigator.serviceWorker.addEventListener("controllerchange", r, { once: true })), new Promise(r => setTimeout(r, 4000))]);
+    }
+    if (ls.get("installed") === "1") { $("#setup").hidden = true; loadModel(); }
+  }
+  boot();
+  if (!/^https?:/.test(location.protocol)) { $("#suP").textContent = "Open this app from a web address (https:// or localhost), not as a file, so the model can be stored for offline use."; $("#dl").disabled = true; }
+  window.__S = S;
+})();
+</script></body></html>
