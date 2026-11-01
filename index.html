@@ -124,6 +124,8 @@ textarea.ar{font-size:26px;line-height:1.7;text-align:right}
 
   /* ---------- model worker ---------- */
   const files = {};
+  const HOSTS = ["https://huggingface.co/", "https://hf-mirror.com/"];
+  let hostTry = 0;
   function startWorker() {
     if (S.worker) return S.worker;
     const w = S.worker = new Worker("worker.js", { type: "module" });
@@ -135,9 +137,11 @@ textarea.ar{font-size:26px;line-height:1.7;text-align:right}
         const pct = t ? Math.min(99, Math.round(100 * l / t)) : 0;
         $("#barI").style.width = pct + "%"; status("", `Downloading ${pct}%`); $("#suP").textContent = `${(l / 1e6).toFixed(0)} of ${(t / 1e6).toFixed(0)} MB. Keep this page open.`;
       } else if (m.type === "ready") {
-        S.ready = true; S.loading = false; ls.set("installed", "1"); $("#setup").hidden = true; status("ready", "Offline · AI ready"); toast("Ready. Translation now works with no internet."); run();
+        S.ready = true; S.loading = false; ls.set("installed", "1"); ls.set("host", hostOrder()[hostTry]); hostTry = 0; $("#setup").hidden = true; status("ready", "Offline · AI ready"); toast("Ready. Translation now works with no internet."); run();
       } else if (m.type === "error") {
-        S.loading = false; S.worker = null; $("#bar").hidden = true; $("#dl").disabled = false; $("#dl").textContent = "Try again";
+        S.worker = null;
+        if (navigator.onLine !== false && !S.ready) { const order = hostOrder(); if (hostTry + 1 < order.length) { hostTry++; S.loading = false; Object.keys(files).forEach(k => delete files[k]); toast("Main host unreachable. Trying a mirror…"); loadModel(); return; } }
+        S.loading = false; hostTry = 0; $("#bar").hidden = true; $("#dl").disabled = false; $("#dl").textContent = "Try again";
         const off = navigator.onLine === false;
         status("err", "Model not loaded"); $("#setup").hidden = false; $("#suT").textContent = off ? "Connect once to download the model" : "The model couldn't load";
         $("#suP").textContent = off ? "The first download needs internet. After that it works offline." : "Check your connection and storage space, then try again. (" + m.message.slice(0, 120) + ")";
@@ -145,12 +149,13 @@ textarea.ar{font-size:26px;line-height:1.7;text-align:right}
     };
     return w;
   }
+  function hostOrder() { const last = ls.get("host"); return last ? [last, ...HOSTS.filter(h => h !== last)] : HOSTS; }
   async function loadModel() {
     if (S.loading || S.ready) return; S.loading = true;
     $("#bar").hidden = false; $("#dl").disabled = true; $("#dl").textContent = "Downloading…"; status("", "Starting…");
     try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { }
     try { const est = await navigator.storage.estimate(); if (est.quota && est.quota - est.usage < 1.3e9) toast("Low storage on this device. The download may fail."); } catch (e) { }
-    startWorker().postMessage({ type: "load" });
+    startWorker().postMessage({ type: "load", host: hostOrder()[hostTry] });
   }
   const NLLB = { en: "eng_Latn", ar: "acm_Arab" };
   function neural(text, dir) {

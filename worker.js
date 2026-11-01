@@ -8,6 +8,7 @@ self.onmessage = async (e) => {
   const m = e.data;
   if (m.type === "load") {
     try {
+      env.remoteHost = m.host || "https://huggingface.co/";
       tr = await pipeline("translation", MODEL, { dtype: "q8", device: "wasm", progress_callback: p => postMessage({ type: "progress", p }) });
       postMessage({ type: "ready" });
     } catch (err) { postMessage({ type: "error", message: String((err && err.message) || err) }); }
