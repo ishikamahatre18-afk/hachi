@@ -98,7 +98,7 @@ textarea.ar{font-size:26px;line-height:1.7;text-align:right}
 (() => {
   const $ = s => document.querySelector(s), esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const ls = { get(k) { try { return localStorage.getItem("hachi2." + k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem("hachi2." + k, v); } catch (e) { } }, del(k) { try { localStorage.removeItem("hachi2." + k); } catch (e) { } } };
-  const S = { dir: "en2ar", ready: false, loading: false, job: 0, raw: "", flavour: ls.get("flavour") !== "0", worker: null, pend: new Map(), seq: 0, cache: new Map() };
+  const S = { mode: ls.get("mode") || "nllb", dir: "en2ar", ready: false, loading: false, job: 0, raw: "", flavour: ls.get("flavour") !== "0", worker: null, pend: new Map(), seq: 0, cache: new Map() };
   const inp = $("#inp"), out = $("#out");
   $("#flavour").checked = S.flavour;
 
@@ -129,6 +129,7 @@ textarea.ar{font-size:26px;line-height:1.7;text-align:right}
   function startWorker() {
     if (S.worker) return S.worker;
     const w = S.worker = new Worker("worker.js", { type: "module" });
+    w.onerror = () => failSlow("The translation engine stopped. This usually means the phone ran out of memory.");
     w.onmessage = e => {
       const m = e.data;
       if (m.type === "progress") {
@@ -137,7 +138,10 @@ textarea.ar{font-size:26px;line-height:1.7;text-align:right}
         const pct = t ? Math.min(99, Math.round(100 * l / t)) : 0;
         $("#barI").style.width = pct + "%"; status("", `Downloading ${pct}%`); $("#suP").textContent = `${(l / 1e6).toFixed(0)} of ${(t / 1e6).toFixed(0)} MB. Keep this page open.`;
       } else if (m.type === "ready") {
-        S.ready = true; S.loading = false; ls.set("installed", "1"); ls.set("host", hostOrder()[hostTry]); hostTry = 0; $("#setup").hidden = true; status("ready", "Offline · AI ready"); toast("Ready. Translation now works with no internet."); run();
+        S.loading = false; ls.set("installed", "1"); ls.set("host", hostOrder()[hostTry]); hostTry = 0; $("#bar").hidden = true; $("#setup").hidden = true;
+        status("", "Warming up…"); S.ready = true;
+        const t0 = Date.now();
+        neural("Hello.", "en2ar", 150000).then(r => { if (r.error) return failSlow(r.error === "timeout" ? "The model started but didn't answer in time." : "The model failed its first test: " + r.error.slice(0, 80)); status("ready", "Offline · AI ready"); toast(`Ready in ${Math.round((Date.now() - t0) / 1000)}s. Works with no internet.`); run(); });
       } else if (m.type === "error") {
         S.worker = null;
         if (navigator.onLine !== false && !S.ready) { const order = hostOrder(); if (hostTry + 1 < order.length) { hostTry++; S.loading = false; Object.keys(files).forEach(k => delete files[k]); toast("Main host unreachable. Trying a mirror…"); loadModel(); return; } }
@@ -155,15 +159,25 @@ textarea.ar{font-size:26px;line-height:1.7;text-align:right}
     $("#bar").hidden = false; $("#dl").disabled = true; $("#dl").textContent = "Downloading…"; status("", "Starting…");
     try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { }
     try { const est = await navigator.storage.estimate(); if (est.quota && est.quota - est.usage < 1.3e9) toast("Low storage on this device. The download may fail."); } catch (e) { }
-    startWorker().postMessage({ type: "load", host: hostOrder()[hostTry] });
+    startWorker().postMessage({ type: "load", host: hostOrder()[hostTry], mode: S.mode });
   }
   const NLLB = { en: "eng_Latn", ar: "acm_Arab" };
-  function neural(text, dir) {
+  function neural(text, dir, limit) {
     return new Promise(res => {
-      const id = ++S.seq; S.pend.set(id, res);
+      const id = ++S.seq; let done = false;
+      const t = setTimeout(() => { if (!done) { done = true; S.pend.delete(id); res({ error: "timeout" }); } }, limit || 90000);
+      S.pend.set(id, r => { if (!done) { done = true; clearTimeout(t); res(r); } });
       S.worker.postMessage({ type: "translate", id, text, src: dir === "en2ar" ? NLLB.en : NLLB.ar, tgt: dir === "en2ar" ? NLLB.ar : NLLB.en, max: Math.min(256, 24 + text.length * 2), beams: 1 });
     });
   }
+  function failSlow(why) {
+    S.ready = false; S.loading = false; S.job++; if (S.worker) { try { S.worker.terminate(); } catch (e) { } S.worker = null; }
+    status("err", "Too slow on this phone"); show("", ""); out.textContent = "Translation didn't finish.";
+    $("#setup").hidden = false; $("#bar").hidden = true; $("#suT").textContent = S.mode === "nllb" ? "Switch to Fast mode" : "Fast mode also stalled";
+    $("#suP").textContent = why + (S.mode === "nllb" ? " Fast mode uses smaller models (about 170 MB download) and is much lighter on memory. Quality is a little lower." : " Close other apps and try again, or use a newer device.");
+    $("#dl").disabled = false; $("#dl").textContent = S.mode === "nllb" ? "Switch to Fast mode" : "Try again"; S.act = S.mode === "nllb" ? "fast" : "retry";
+  }
+  setInterval(() => { if (S.busyT) { const t = $("#tag"); t.hidden = false; t.textContent = `Translating… ${Math.round((Date.now() - S.busyT) / 1000)}s`; } }, 1000);
 
   /* ---------- translate ---------- */
   const split = t => t.split(/(?<=[.!?؟؛\n])\s+/).map(s => s.trim()).filter(Boolean);
@@ -184,8 +198,9 @@ textarea.ar{font-size:26px;line-height:1.7;text-align:right}
       const key = dir + "|" + segs[i], ex = Engine.translate(segs[i], dir);
       let t = ex && ex.conf === "exact" && ex.out ? ex.out : S.cache.get(key);
       if (t == null) {
-        show(outs.join(" "), "Translating…", "ok", true);
-        const r = await neural(segs[i], dir); if (my !== S.job) return;
+        show(outs.join(" "), "Translating…", "ok", true); S.busyT = Date.now();
+        const r = await neural(segs[i], dir); S.busyT = 0; if (my !== S.job) return;
+        if (r.error === "timeout") return failSlow("This phone took more than 90 seconds for one sentence.");
         if (r.error) { show(outs.join(" "), "Error", "draft"); toast("Translation failed: " + r.error.slice(0, 80)); return; }
         t = r.text; S.cache.set(key, t); if (S.cache.size > 300) S.cache.delete(S.cache.keys().next().value);
       }
@@ -225,13 +240,14 @@ textarea.ar{font-size:26px;line-height:1.7;text-align:right}
   $("#copy").onclick = () => { const t = S.shown; if (!t) return; const done = () => toast("Copied"); try { navigator.clipboard.writeText(t).then(done, () => toast("Couldn't copy")); } catch (e) { toast("Couldn't copy"); } };
   $("#show").onclick = () => { if (!S.shown) return; $("#layer").innerHTML = `<div class="show ${S.dir === "en2ar" ? "ar" : ""}" id="shw"><div>${esc(S.shown)}</div></div>`; $("#shw").onclick = () => $("#layer").innerHTML = ""; };
   $("#mic").onclick = listen;
-  $("#dl").onclick = loadModel;
+  $("#dl").onclick = () => { if (S.act === "fast") { S.mode = "opus"; ls.set("mode", "opus"); ls.del("installed"); $("#suT").textContent = "Downloading Fast mode"; } S.act = ""; loadModel(); };
   $("#status").onclick = () => { if (!S.ready && !S.loading) loadModel(); };
   $("#menu").onclick = () => {
     $("#layer").innerHTML = `<div class="scrim" id="scr"><div class="sheet" role="dialog" aria-label="About"><h3>About Hachi</h3>
       <p>Translation runs on your device with Meta's NLLB-200 model (Iraqi Arabic ⇄ English). Nothing you type is sent anywhere.</p>
       <ul><li>First run needs internet once to download about 1 GB. After that it works offline.</li><li>Speed depends on your device. Short sentences take about a second or two; long text is translated sentence by sentence.</li><li>Machine translation is very good, not perfect. Dialect and slang can come out more formal than spoken Iraqi, which "Iraqi touch" partly corrects. Check anything important with a native speaker.</li><li>Verified phrases (greetings, travel, food, emergencies) use a hand-checked list and appear instantly.</li></ul>
-      <button class="btn" id="del">Remove downloaded model</button><button class="btn pri" id="cls">Close</button></div></div>`;
+      <button class="btn" id="mode">Use ${S.mode === "nllb" ? "Fast mode (smaller, lighter)" : "Best quality mode (1 GB)"}</button><button class="btn" id="del">Remove downloaded model</button><button class="btn pri" id="cls">Close</button></div></div>`;
+    $("#mode").onclick = () => { S.mode = S.mode === "nllb" ? "opus" : "nllb"; ls.set("mode", S.mode); ls.del("installed"); location.reload(); };
     $("#cls").onclick = () => $("#layer").innerHTML = ""; $("#scr").onclick = e => { if (e.target.id === "scr") $("#layer").innerHTML = ""; };
     $("#del").onclick = async () => { try { for (const k of await caches.keys()) if (k.includes("transformers")) await caches.delete(k); } catch (e) { } ls.del("installed"); toast("Model removed. Reloading…"); setTimeout(() => location.reload(), 900); };
   };
