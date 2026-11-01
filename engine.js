@@ -54,8 +54,9 @@ const Engine = (() => {
   function build(custom) {
     const ents = [];
     (custom || []).forEach(c => ents.push({ kind: "c", cat: "mine", verb: false, en: [c.en], ar: [c.ar], tr: [c.tr || ""], id: c.id }));
-    lines(PHRASES).forEach(l => { const [c, e, a, t] = l.split("|"); ents.push(mk("p", c, e, a, t)); });
-    lines(WORDS).forEach(l => { const [e, a, t] = l.split("|"); ents.push(mk("w", "", e, a, t)); });
+    const EP = typeof EXTRA_PHRASES !== "undefined" ? EXTRA_PHRASES : "", EW = typeof EXTRA_WORDS !== "undefined" ? EXTRA_WORDS : "";
+    lines(PHRASES + "\n" + EP).forEach(l => { const [c, e, a, t] = l.split("|"); ents.push(mk("p", c, e, a, t)); });
+    lines(WORDS + "\n" + EW).forEach(l => { const [e, a, t] = l.split("|"); ents.push(mk("w", "", e, a, t)); });
     const idx = { en: new Map(), ar: new Map(), trL: new Map(), trS: new Map() };
     const add = (m, k, e) => { if (!k) return; let a = m.get(k); if (!a) m.set(k, a = []); if (!a.includes(e)) a.push(e); };
     const fz = { en: [], ar: [], tr: [] };
@@ -84,6 +85,7 @@ const Engine = (() => {
       if (list.length) replies.set(qe.id, list);
     });
     DB = { ents, idx, fz, pats, replies };
+    buildVerbs(); buildRev();
     return DB;
   }
 
@@ -136,7 +138,8 @@ const Engine = (() => {
     const parts = []; let i = 0, the = false;
     while (i < tokens.length) {
       let found = null, len = 0;
-      for (let n = Math.min(6, tokens.length - i); n >= 1; n--) {
+      const pv = parts[parts.length - 1], afterPron = mode === "ar" && pv && pv.entry && PRON_EN.has(pv.entry.en[0]) && REV.has(tokens[i]);
+      for (let n = afterPron ? 1 : Math.min(6, tokens.length - i); n >= 1; n--) {
         let ents = lookup(tokens.slice(i, i + n).join(" "), mode);
         if (ents && n === 1 && ents.length > 1) ents = ents.slice().sort((a, b) => (a.kind === "p") - (b.kind === "p"));
         if (ents) { found = ents; len = n; break; }
@@ -171,6 +174,10 @@ const Engine = (() => {
           if (t.length > 3 && t.startsWith("ل") && lookup(t.slice(1), "ar")) {
             const b = mkPart(lookup(t.slice(1), "ar"), t, dir); b.out = "to " + b.out; parts.push(b); i++; continue;
           }
+          const rv = REV.get(t), nrv = t === "دا" ? REV.get(tokens[i + 1]) : null, prev = parts[parts.length - 1];
+          const choose = list => { const pp = prev && prev.entry && PRON_EN.has(prev.entry.en[0]) ? PERSON[prev.entry.en[0]] : null; return (pp && list.find(x => x.person === pp || (pp === "2m" && x.person === "2f"))) || list[0]; };
+          if (nrv) { parts.push(verbPart(t + " " + tokens[i + 1], choose(nrv.filter(x => x.tense === "pres")) || nrv[0], prev, true)); i += 2; continue; }
+          if (rv) { parts.push(verbPart(t, choose(rv), prev, false)); i++; continue; }
           const suf = { "ي": "my", "ك": "your", "ه": "his" }[t.slice(-1)];
           if (suf && t.length > 3 && lookup(t.slice(0, -1), "ar")) { const p = mkPart(lookup(t.slice(0, -1), "ar"), t, dir); p.out = suf + " " + p.out; parts.push(p); i++; continue; }
         }
@@ -185,7 +192,23 @@ const Engine = (() => {
   const isModal = p => p.entry && /^(can|will|must)/.test(p.entry.en[0]);
   const isNeg = p => p.entry && /^(do not|not|can not)/.test(p.entry.en[0]);
   const isPron = p => p.entry && PRON.has(p.entry.en[0]);
+  const ADJ = new Set("new old big small large good bad cheap expensive hot cold beautiful pretty clean dirty fast slow easy difficult hard tall short happy sad busy tired sick ready full empty red blue green yellow white black brown grey gray pink".split(" "));
+  const NOFEM = new Set(["red", "blue", "green", "yellow", "white", "black", "brown", "grey", "gray", "pink", "happy", "sad", "busy", "tired", "sick", "ready", "full", "empty"]);
+  function adjOrder(parts) {
+    const a = parts.slice();
+    for (let i = 0; i < a.length - 1; i++) {
+      const p = a[i], n = a[i + 1];
+      if (p.known && n.known && p.entry && n.entry && ADJ.has(p.src) && !ADJ.has(n.src) && n.entry.kind === "w" && !n.verb && !n.num && !/^(i|you|he|she|we|they|this|that|here|there)$/.test(n.src)) {
+        let adj = Object.assign({}, p), noun = Object.assign({}, n);
+        if (/ة$/.test(noun.out) && !NOFEM.has(p.src)) adj.out = /ي$/.test(adj.out) ? adj.out + "ة" : adj.out + "ة";
+        if (n.the || p.the) { noun.the = true; if (!adj.out.startsWith("ال")) adj.out = "ال" + adj.out; adj.the = false; }
+        a[i] = noun; a[i + 1] = adj; i++;
+      }
+    }
+    return a;
+  }
   function joinParts(parts, dir) {
+    if (dir === "en2ar") parts = adjOrder(parts);
     if (dir === "ar2en") {
       const outs = parts.map(p => (p.the && !p.num ? "the " : "") + p.out);
       parts.forEach((p, i) => {
@@ -229,9 +252,130 @@ const Engine = (() => {
     const res = new Map();
     DB.fz[mode].forEach(([k, e]) => {
       const s = dice(key, k);
-      if (s > (res.get(e)?.sim || 0)) res.set(e, { entry: e, sim: s });
+      if (s > (res.get(e)?.sim || 0)) res.set(e, { entry: e, sim: s, key: k });
     });
     return [...res.values()].filter(r => r.sim >= 0.55).sort((a, b) => b.sim - a.sim).slice(0, limit || 3);
+  }
+
+  /* ---------- verbs and simple clause grammar (English -> Iraqi) ---------- */
+  let VB = {}, VFORM = new Map();
+  const IRR = { went: "go", gone: "go", came: "come", saw: "see", seen: "see", said: "say", slept: "sleep", bought: "buy", gave: "give", given: "give", did: "do", done: "do", made: "do", sold: "sell", took: "take", taken: "take", ate: "eat", eaten: "eat", drank: "drink", drunk: "drink", found: "find", forgot: "forget", left: "leave", sat: "sit", wrote: "write", written: "write", paid: "pay", knew: "know", known: "know", understood: "understand", spoke: "speak", thought: "think", sent: "send", brought: "bring", heard: "hear", met: "meet", began: "start" };
+  const ALIAS = { talk: "speak", make: "do", begin: "start", reserve: "book", purchase: "buy", depart: "leave" };
+  function buildVerbs() {
+    VB = {}; VFORM = new Map();
+    lines(typeof VERBS !== "undefined" ? VERBS : "").forEach(l => {
+      const [lem, p1, past] = l.split("|"); let pf = null;
+      if (past) { const a = past.split(","); pf = a.length === 5 ? a : [past + "ت", past, past + "ت", past + "نا", past + "وا"]; }
+      VB[lem] = { p1, past: pf };
+    });
+    const add = (w, lemma, form) => { if (!VFORM.has(w)) VFORM.set(w, { lemma, form }); };
+    const bases = Object.keys(VB).map(l => [l, l]).concat(Object.entries(ALIAS).filter(([, l]) => VB[l]).map(([a, l]) => [a, l]));
+    bases.forEach(([b, l]) => {
+      const cons = !/[aeiou]$/.test(b) ? b + b[b.length - 1] : b;
+      add(b, l, "base");
+      add(/(s|sh|ch|x|o)$/.test(b) ? b + "es" : /[^aeiou]y$/.test(b) ? b.slice(0, -1) + "ies" : b + "s", l, "s");
+      [b + "ing", b.replace(/e$/, "") + "ing", cons + "ing"].forEach(w => add(w, l, "ing"));
+      [b + "ed", b + "d", b.replace(/y$/, "i") + "ed", cons + "ed"].forEach(w => add(w, l, "ed"));
+    });
+    Object.entries(IRR).forEach(([w, l]) => { if (VB[l]) { VFORM.delete(w); VFORM.set(w, { lemma: l, form: "ed" }); } });
+  }
+  let REV = new Map();
+  const PRON_EN = new Set(["i", "you", "he", "she", "we", "they"]);
+  const PEN = { "1": "I", "2m": "you", "2f": "you", "3m": "he", "3f": "she", "1p": "we", "3p": "they" };
+  function enForm(l, form) {
+    if (form === "ed") { for (const w in IRR) if (IRR[w] === l && !/^(gone|seen|given|done|taken|eaten|drunk|written|known)$/.test(w)) return w; return /e$/.test(l) ? l + "d" : /[^aeiou]y$/.test(l) ? l.slice(0, -1) + "ied" : l === "stop" ? "stopped" : l + "ed"; }
+    if (form === "ing") return /[^e]e$/.test(l) ? l.slice(0, -1) + "ing" : l === "stop" ? "stopping" : l === "sit" ? "sitting" : l + "ing";
+    if (form === "s") return l === "go" ? "goes" : l === "do" ? "does" : /(s|sh|ch|x|o)$/.test(l) ? l + "es" : /[^aeiou]y$/.test(l) ? l.slice(0, -1) + "ies" : l + "s";
+    return l;
+  }
+  function buildRev() {
+    REV = new Map();
+    const P = ["1", "2m", "2f", "3m", "3f", "1p", "3p"], put = (f, o) => { const k = normAr(f); if (!REV.has(k)) REV.set(k, []); REV.get(k).push(o); };
+    Object.entries(VB).forEach(([l, v]) => {
+      P.forEach(p => put(presForm(v.p1, p), { lemma: l, person: p, tense: "pres" }));
+      if (v.past) P.forEach(p => put(pastForm(v, p), { lemma: l, person: p, tense: "past" }));
+    });
+  }
+  function verbPart(src, pick, prev, prog) {
+    const pp = prev && prev.entry && PRON_EN.has(prev.entry.en[0]);
+    const neg = prev && prev.entry && prev.entry.en[0] === "do not", third = pick.person[0] === "3" && pick.person !== "3p";
+    let v;
+    if (prog) v = ({ "1": "am", "3m": "is", "3f": "is" }[pick.person] || "are") + " " + enForm(pick.lemma, "ing");
+    else if (neg) { prev.out = pick.tense === "past" ? "did not" : third ? "does not" : "do not"; v = pick.lemma; }
+    else v = pick.tense === "past" ? enForm(pick.lemma, "ed") : enForm(pick.lemma, third ? "s" : "base");
+    return { src, out: (pp || neg ? "" : PEN[pick.person] + " ") + v, tr: "", known: true };
+  }
+  const PERSON = { i: "1", you: "2m", he: "3m", she: "3f", it: "3m", we: "1p", they: "3p" };
+  const PRON_AR = { i: "آني", you: "إنت", he: "هو", she: "هي", we: "احنا", they: "هم" };
+  function presForm(p1, person) {
+    if (person === "1") return p1;
+    const lead = p1[0] === "آ" ? "ا" : "", stem = p1.slice(1);
+    const pre = { "2m": "ت", "2f": "ت", "3m": "ي", "3f": "ت", "1p": "ن", "3p": "ي" }[person];
+    let b = pre + lead + stem;
+    if (person === "2f" || person === "3p") {
+      const suf = person === "2f" ? "ين" : "ون", last = b.slice(-1);
+      b = "يىا".includes(last) ? b.slice(0, -1) + suf : b + suf;
+    }
+    return b;
+  }
+  function pastForm(v, person) {
+    const k = { "1": 0, "2m": 0, "2f": 0, "3m": 1, "3f": 2, "1p": 3, "3p": 4 }[person];
+    if (v.past) return v.past[k];
+    return { "1": "كنت", "2m": "كنت", "2f": "كنتِ", "3m": "كان", "3f": "كانت", "1p": "كنا", "3p": "كانوا" }[person] + " " + presForm(v.p1, person);
+  }
+  const canForm = person => presForm("اگدر", person);
+  const MOTION = new Set(["go", "come", "return", "walk", "travel", "arrive"]);
+  function clause(tokens, caps) {
+    let i = 0, q = false, subj = null, aux = null, neg = false;
+    const A = { do: "do", does: "do", did: "did", will: "will", can: "can", could: "can", are: "be", is: "be", am: "be" };
+    if (A[tokens[0]] && PERSON[tokens[1]]) { q = true; aux = A[tokens[0]]; subj = tokens[1]; i = 2; }
+    else if (PERSON[tokens[0]]) {
+      subj = tokens[0]; i = 1; const t = tokens[i];
+      if (A[t] && t !== "could") { aux = A[t]; i++; }
+      else if (t === "could") { aux = "can"; i++; }
+      else if (t === "going" && tokens[i + 1] === "to" && VFORM.get(tokens[i + 2])) { aux = "will"; i += 2; }
+      else if ((t === "have" || t === "has") && tokens[i + 1] === "to") { aux = "must"; i += 2; }
+      else if (t === "must") { aux = "must"; i++; }
+    } else return null;
+    if (tokens[i] === "not") { neg = true; i++; }
+    if (/^(have|has|had)$/.test(tokens[i]) && tokens[i + 1] !== "to" && !aux) {
+      const past = tokens[i] === "had", suf = { "1": "ي", "2m": "ك", "2f": "ج", "3m": "ه", "3f": "ها", "1p": "نا", "3p": "هم" }[PERSON[subj]];
+      const rest = tokens.slice(i + 1), parts = rest.length ? chunk(rest, "en", "en2ar", caps) : [];
+      const core = (past ? "كان " : "") + (neg ? "ماعند" : "عند") + suf;
+      return { out: (core + " " + joinParts(parts, "en2ar").out).trim(), parts: [{ src: tokens[i], out: core, known: true }].concat(parts), unknown: parts.filter(p => !p.known).map(p => p.src) };
+    }
+    const info = VFORM.get(tokens[i]); if (!info) return null;
+    if (aux === "be" && info.form !== "ing") return null;
+    if (["will", "can", "do", "did", "must"].includes(aux) && info.form !== "base") return null;
+    if (!aux && info.form === "ing") return null;
+    i++;
+    let lemma = info.lemma, v = VB[lemma], person = PERSON[subj];
+    let tense = aux === "be" ? "prog" : aux === "will" ? "fut" : aux === "can" ? "can" : aux === "must" ? "must" : aux === "did" ? "past" : aux === "do" ? "pres" : info.form === "ed" ? "past" : "pres";
+    let rest = tokens.slice(i), v2 = null;
+    if (rest[0] === "to" && VFORM.get(rest[1]) && VFORM.get(rest[1]).form === "base" && (lemma === "want" || lemma === "need")) { v2 = VB[VFORM.get(rest[1]).lemma]; rest = rest.slice(2); if (lemma === "need") { tense = "must"; v = v2; v2 = null; } }
+    let vp;
+    if (tense === "pres") vp = presForm(v.p1, person);
+    else if (tense === "prog") vp = "دا " + presForm(v.p1, person);
+    else if (tense === "fut") vp = "راح " + presForm(v.p1, person);
+    else if (tense === "can") vp = canForm(person) + " " + presForm(v.p1, person);
+    else if (tense === "must") vp = "لازم " + presForm(v.p1, person);
+    else vp = pastForm(v, person);
+    if (v2) vp += " " + presForm(v2.p1, person);
+    if (neg) vp = "ما " + vp;
+    let restOut = "", parts = [];
+    if (rest.length) {
+      let lead = "";
+      if (MOTION.has(lemma) && rest[0] === "to") { rest = rest.slice(1); lead = "ل"; }
+      if (MOTION.has(lemma) && rest[0] === "home") { parts = []; restOut = "للبيت"; rest = rest.slice(1); lead = ""; }
+      if (rest.length) {
+        parts = chunk(rest, "en", "en2ar", caps);
+        restOut = joinParts(parts, "en2ar").out;
+        if (lead) restOut = restOut.startsWith("ال") ? "لل" + restOut.slice(2) : "ل" + restOut;
+      }
+    }
+    const pron = !q && subj !== "it" ? PRON_AR[subj] + " " : "";
+    const out = (pron + vp + (restOut ? " " + restOut : "")).trim() + (q ? "؟" : "");
+    return { out, parts: [{ src: tokens.slice(0, tokens.length - rest.length).join(" "), out: (pron + vp).trim(), known: true }].concat(parts), unknown: parts.filter(p => !p.known).map(p => p.src) };
   }
 
   /* ---------- main entry ---------- */
@@ -254,6 +398,10 @@ const Engine = (() => {
       else { e.en.slice(1).forEach(a => list.push(a)); ents.slice(1).forEach(x => list.push(clean(x.en[0]))); }
       return [...new Set(list)].filter(x => x !== (dir === "en2ar" ? e.ar[0] : e.en[0]));
     };
+
+    // 0. the user's own corrections win over everything
+    const fix = Engine.corrections[dir + "|" + key];
+    if (fix) { Object.assign(R, { out: fix, conf: "yours", score: 1 }); return R; }
 
     // 1. exact phrase or word
     const exact = lookup(key, mode);
@@ -287,9 +435,16 @@ const Engine = (() => {
       if (dir === "ar2en" && p.enOnly) return;
       const m = key.match(p[rk]);
       if (!m) return;
+      if (dir === "ar2en" && p.en === "i am *" && (REV.has(m[1].split(" ")[0]) || m[1].split(" ")[0] === "دا")) return;
       const score = p.fix[fk] * 10 + (dir === "ar2en" && p.q === q ? 1 : 0);
       if (!best || score > best.score) best = { p, m, score };
     });
+    const cl = mode === "en" ? clause(tokensOf(key), caps) : null;
+    if (cl && (!best || /^i am/.test(best.p.en))) {
+      Object.assign(R, { out: cl.out, parts: cl.parts, unknown: cl.unknown, conf: "clause", score: cl.unknown.length ? 0.6 : 0.85 });
+      if (cl.unknown.length) R.note = "unknown";
+      return R;
+    }
     if (best) {
       const inner = chunk(tokensOf(best.m[1]), mode, dir, caps);
       const j = joinParts(inner, dir);
@@ -309,7 +464,7 @@ const Engine = (() => {
 
     // 3. close phrase (typo tolerant)
     const sim = key.length >= 5 ? similar(key, mode, 4) : [];
-    if (sim.length && sim[0].sim >= 0.82) {
+    if (sim.length && sim[0].sim >= 0.88 && sim[0].key.split(" ").length === key.split(" ").length) {
       const e = sim[0].entry, s = speaker(e);
       Object.assign(R, s, { conf: "close", score: sim[0].sim, matched: e, alts: [], note: "close" });
       R.replies = DB.replies.get(e.id) || [];
@@ -326,7 +481,7 @@ const Engine = (() => {
     let out = j.out, tr = j.tr;
     if (parts.length === 1 && parts[0].verb && dir === "ar2en") out = "to " + out;
     R.unknown = parts.filter(p => !p.known).map(p => p.src);
-    R.parts = parts; R.similar = sim.filter(s => s.sim < 0.82);
+    R.parts = parts; R.similar = sim.filter(s => s.sim < 0.88);
     if (known === 0) { R.conf = "none"; R.out = ""; R.score = 0; return R; }
     R.out = polish(out, dir, q); R.tr = tr; R.conf = "words";
     R.score = Math.max(0.2, 0.7 * known / parts.length);
@@ -357,6 +512,6 @@ const Engine = (() => {
   function phrases() { if (!DB) build([]); return DB.ents.filter(e => e.kind === "p"); }
   function stats() { if (!DB) build([]); return { phrases: DB.ents.filter(e => e.kind === "p").length, words: DB.ents.filter(e => e.kind === "w").length, patterns: DB.pats.length }; }
 
-  return { build, translate, suggest, findEn, phrases, stats, hasArabic, normEn, normAr, normTr, clean, toArDigits };
+  return { corrections: {}, normKey: (t, dir) => dir + "|" + (dir === "en2ar" ? normEn(t) : normAr(t)), build, translate, suggest, findEn, phrases, stats, hasArabic, normEn, normAr, normTr, clean, toArDigits };
 })();
 if (typeof module !== "undefined") module.exports = Engine;

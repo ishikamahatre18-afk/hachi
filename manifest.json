@@ -1,2 +1,2 @@
-{"name":"Hachi – Offline Iraqi ⇄ English Translator","short_name":"Hachi","start_url":"./index.html","scope":"./","display":"standalone","background_color":"#14307F","theme_color":"#14307F",
-"icons":[{"src":"icon-192.png","sizes":"192x192","type":"image/png","purpose":"any maskable"},{"src":"icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}]}
+{"id":"./","name":"Hachi – Iraqi Translator","short_name":"Hachi","description":"English to Iraqi Arabic translator that works offline.","start_url":"./","scope":"./","display":"standalone","orientation":"portrait","background_color":"#14307F","theme_color":"#14307F","lang":"en",
+"icons":[{"src":"icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},{"src":"icon-512.png","sizes":"512x512","type":"image/png","purpose":"any"},{"src":"icon-512.png","sizes":"512x512","type":"image/png","purpose":"maskable"}]}
